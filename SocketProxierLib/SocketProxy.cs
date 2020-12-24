@@ -11,12 +11,13 @@ namespace SocketProxierLib
 {
     public class SocketProxy : IDisposable
     {
-        public string _connectionString;
         private readonly Socket _client;
         private readonly Socket _server;
         private long _threadExits = 0;
         private long _bytesIn = 0;
         private long _bytesOut = 0;
+        public event EventHandler Disconnect;
+        public string ConnectionString { get; private set; }
 
         /// <summary>
         /// The number of bytes sent from server to client
@@ -48,8 +49,8 @@ namespace SocketProxierLib
             _server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             
             _server.Connect(endPoint);
-            _connectionString = $"Connection from {client.RemoteEndPoint.ToString()} forwarded via {_server.LocalEndPoint.ToString()} to {_server.RemoteEndPoint.ToString()}";
-            Logger.LogMessage(Severity.Information, "SocketProxy", $"Open:  {_connectionString}");
+            ConnectionString = $"Connection from {client.RemoteEndPoint.ToString()} forwarded via {_server.LocalEndPoint.ToString()} to {_server.RemoteEndPoint.ToString()}";
+            Logger.LogMessage(Severity.Information, "SocketProxy", $"Open:  {ConnectionString}");
 
             // Launch threads for bi-directional communication
             Thread serverThread = new Thread(ServerToClient);
@@ -93,6 +94,7 @@ namespace SocketProxierLib
                 while (true)
                 {
                     int count = _client.Receive(stuff);
+                    BytesOut += count;
                     if (count == 0)
                     {
                         HandleClosure();
@@ -119,7 +121,8 @@ namespace SocketProxierLib
             var exits = IncrementExits();
             if (exits <= 1)
             {
-                Logger.LogMessage(Severity.Information, "SocketProxy", $"Close: {_connectionString} closed gracefully");
+                Logger.LogMessage(Severity.Information, "SocketProxy", $"Close: {ConnectionString} closed gracefully");
+                OnDisconnect(EventArgs.Empty);
             }
         }
 
@@ -132,7 +135,8 @@ namespace SocketProxierLib
             var exits = IncrementExits();
             if (exits <= 1)
             {
-                Logger.LogMessage(Severity.Information, "SocketProxy", $"Error: {_connectionString} closed: {e.Message}");
+                Logger.LogMessage(Severity.Information, "SocketProxy", $"Error: {ConnectionString} closed: {e.Message}");
+                OnDisconnect(EventArgs.Empty);
             }
         }
 
@@ -163,6 +167,11 @@ namespace SocketProxierLib
             }
         }
 
+        protected virtual void OnDisconnect(EventArgs e)
+        {
+            Disconnect?.Invoke(this, e);
+        }
+
         public void Dispose()
         {
             Dispose(true);
@@ -171,7 +180,11 @@ namespace SocketProxierLib
 
         public override string ToString()
         {
-            return _connectionString;
+            return ConnectionString;
         }
+    }
+
+    public class DisconnectEventArgs
+    {
     }
 }

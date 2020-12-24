@@ -14,39 +14,27 @@ namespace SocketProxierLib
     /// </summary>
     public class Controller : IDisposable
     {
-        Socket _listener;
-        DnsEndPoint _destination;
-        Task _loop;
-        CancellationTokenSource _loopCancelTokenSrc;
-        CancellationToken _loopCancelToken;
-        public List<SocketProxy> OpenConnections { get; }
+        private Socket _listener;
+        private DnsEndPoint _destination;
+        private Task _loop;
+        private CancellationTokenSource _loopCancelTokenSrc;
+        private CancellationToken _loopCancelToken;
+        private int _listenPort;
+        private string _destinationHost;
+        private int _destinationPort;
+        private List<SocketProxy> _openConnections;
+        public List<SocketProxy> OpenConnections
+        {
+            get => _openConnections.ToList(); // Creates a copy to avoid threading issues
+        }
         public ControllerStatus Status { get; private set; } = ControllerStatus.NotStarted;
 
         public Controller(int listenPort, string destinationHost, int destinationPort)
         {
-            try
-            {
-                _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                _listener.Bind(new IPEndPoint(IPAddress.Loopback, listenPort));
-            }
-            catch (Exception e)
-            {
-                Logger.LogMessage(Severity.Critical, "Controller", $"Failed to start listener {e.Message}");
-                return;
-            }
-
-            try
-            {
-                _destination = new DnsEndPoint(destinationHost, destinationPort);
-            }
-            catch (Exception e)
-            {
-                Logger.LogMessage(Severity.Critical, "Controller", $"Failed to resolve endpoint {e.Message}");
-                return;
-            }
-
-            OpenConnections = new List<SocketProxy>(16);
-            Logger.LogMessage(Severity.Verbose, "Controller", "Initialised");
+            _listenPort = listenPort;
+            _destinationHost = destinationHost;
+            _destinationPort = destinationPort;
+            _openConnections = new List<SocketProxy>(16);
         }
 
         /// <summary>
@@ -56,6 +44,28 @@ namespace SocketProxierLib
         {
             Logger.LogMessage(Severity.Verbose, "Controller", "Starting");
             Status = ControllerStatus.Starting;
+
+            try
+            {
+                _destination = new DnsEndPoint(_destinationHost, _destinationPort);
+            }
+            catch (Exception e)
+            {
+                Logger.LogMessage(Severity.Critical, "Controller", $"Failed to resolve endpoint {e.Message}");
+                return;
+            }
+
+            try
+            {
+                _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                _listener.Bind(new IPEndPoint(IPAddress.Loopback, _listenPort));
+            }
+            catch (Exception e)
+            {
+                Logger.LogMessage(Severity.Critical, "Controller", $"Failed to start listener {e.Message}");
+                return;
+            }
+
             try
             {
                 _loopCancelTokenSrc = new CancellationTokenSource();
@@ -87,7 +97,8 @@ namespace SocketProxierLib
                     var client = _listener.Accept();
                     _loopCancelToken.ThrowIfCancellationRequested();
                     var socketProxy = new SocketProxy(client, _destination);
-                    OpenConnections.Add(socketProxy);
+                    _openConnections.Add(socketProxy);
+                    socketProxy.Disconnect += socket_Disconnect;
                 }
                 catch (Exception e)
                 {
@@ -120,11 +131,16 @@ namespace SocketProxierLib
             Logger.LogMessage(Severity.Information, "Controller", "Stopping");
             Status = ControllerStatus.Stopping;
             _loopCancelTokenSrc.Cancel();
-            _listener.Shutdown(SocketShutdown.Both); // Shutting down the listener causes the loop to break out if stuck in .Accept() call and accept the cancellation
+            _listener.Close(); // Closing the listener causes the loop to break out if stuck in .Accept() call and accept the cancellation
             _loop.Wait();
-            OpenConnections.ForEach((c) => c.Dispose());
+            _openConnections.ForEach((c) => c.Dispose());
             _loop.Dispose();
             Status = ControllerStatus.Stopped;
+        }
+
+        public void socket_Disconnect(object sender, EventArgs e)
+        {
+            _openConnections.Remove((SocketProxy)sender);
         }
 
         public enum ControllerStatus
