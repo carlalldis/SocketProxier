@@ -7,21 +7,49 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace SocketProxier
+namespace SocketProxierLib
 {
-    class SocketProxy : IDisposable
+    public class SocketProxy : IDisposable
     {
-        private readonly string _connectionString;
+        public string _connectionString;
         private readonly Socket _client;
         private readonly Socket _server;
         private long _threadExits = 0;
-        public SocketProxy(Socket client, IPAddress destinationAddress, int destinationPort)
+        private long _bytesIn = 0;
+        private long _bytesOut = 0;
+
+        /// <summary>
+        /// The number of bytes sent from server to client
+        /// </summary>
+        public long BytesIn
+        {
+            get => Interlocked.Read(ref _bytesIn);
+            private set
+            {
+                _ = Interlocked.Exchange(ref _bytesIn, value);
+            }
+        }
+
+        /// <summary>
+        /// The number of bytes sent from client to server
+        /// </summary>
+        public long BytesOut
+        {
+            get => Interlocked.Read(ref _bytesOut);
+            private set
+            {
+                _ = Interlocked.Exchange(ref _bytesOut, value);
+            }
+        }
+
+        public SocketProxy(Socket client, EndPoint endPoint)
         {
             _client = client;
             _server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            _server.Connect(new IPEndPoint(destinationAddress, destinationPort));
-            _connectionString = $"Connection from {client.RemoteEndPoint.ToString()} forwarded through {_server.LocalEndPoint.ToString()} to {_server.RemoteEndPoint.ToString()}";
-            Console.WriteLine($"Open:  {_connectionString}");
+            
+            _server.Connect(endPoint);
+            _connectionString = $"Connection from {client.RemoteEndPoint.ToString()} forwarded via {_server.LocalEndPoint.ToString()} to {_server.RemoteEndPoint.ToString()}";
+            Logger.LogMessage(Severity.Information, "SocketProxy", $"Open:  {_connectionString}");
 
             // Launch threads for bi-directional communication
             Thread serverThread = new Thread(ServerToClient);
@@ -38,6 +66,7 @@ namespace SocketProxier
                 while (true)
                 {
                     int count = _server.Receive(data);
+                    BytesIn += count;
                     if (count == 0)
                     {
                         HandleClosure();
@@ -90,7 +119,7 @@ namespace SocketProxier
             var exits = IncrementExits();
             if (exits <= 1)
             {
-                Console.WriteLine($"Close: {_connectionString} closed gracefully");
+                Logger.LogMessage(Severity.Information, "SocketProxy", $"Close: {_connectionString} closed gracefully");
             }
         }
 
@@ -103,7 +132,7 @@ namespace SocketProxier
             var exits = IncrementExits();
             if (exits <= 1)
             {
-                Console.WriteLine($"Error: {_connectionString} closed: {e.Message}");
+                Logger.LogMessage(Severity.Information, "SocketProxy", $"Error: {_connectionString} closed: {e.Message}");
             }
         }
 
@@ -139,5 +168,10 @@ namespace SocketProxier
             Dispose(true);
         }
         #endregion
+
+        public override string ToString()
+        {
+            return _connectionString;
+        }
     }
 }

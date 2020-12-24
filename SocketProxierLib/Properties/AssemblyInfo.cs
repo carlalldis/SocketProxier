@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("SocketProxier")]
+[assembly: AssemblyTitle("SocketProxierLib")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("SocketProxier")]
-[assembly: AssemblyCopyright("")]
+[assembly: AssemblyProduct("SocketProxierLib")]
+[assembly: AssemblyCopyright("Copyright ©  2020")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("6d64308b-d4fe-419f-b026-505080b2a1bb")]
+[assembly: Guid("ae9a3d41-2e54-4b80-9475-976a3e43a8c1")]
 
 // Version information for an assembly consists of the following four values:
 //
